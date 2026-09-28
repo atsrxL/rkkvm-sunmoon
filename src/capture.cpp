@@ -2,20 +2,53 @@
 // Layout/import approach informed by nanopc-t6-kvm native/capture.c (GPL-3.0-or-later).
 // Unlike that reference, this implementation NEVER changes source timings or format.
 #include "rkmoon/capture.hpp"
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <iostream>
+#include <linux/dma-buf.h>
 #include <poll.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <unistd.h>
+#include <string>
 namespace rkmoon {
+std::vector<PoolBuffer> borrow_capture_pool(const std::string& path) {
+  std::vector<PoolBuffer> out;
+  if(path.empty()||path.size()>=sizeof(sockaddr_un::sun_path)) return out;
+  Fd s(socket(AF_UNIX,SOCK_STREAM|SOCK_CLOEXEC,0));if(s.get()<0) return out;
+  sockaddr_un a{};a.sun_family=AF_UNIX;std::memcpy(a.sun_path,path.c_str(),path.size());
+  if(connect(s.get(),reinterpret_cast<sockaddr*>(&a),sizeof(a))<0) return out;
+  timeval tv{1,0};setsockopt(s.get(),SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof(tv));
+  char text[256]{};iovec io{text,sizeof(text)-1};
+  alignas(cmsghdr) char control[CMSG_SPACE(sizeof(int)*4)]{};
+  msghdr m{};m.msg_iov=&io;m.msg_iovlen=1;m.msg_control=control;m.msg_controllen=sizeof(control);
+  ssize_t n;do{n=recvmsg(s.get(),&m,MSG_CMSG_CLOEXEC);}while(n<0&&errno==EINTR);
+  std::vector<int> fds;
+  for(auto* c=CMSG_FIRSTHDR(&m);c;c=CMSG_NXTHDR(&m,c))
+    if(c->cmsg_level==SOL_SOCKET&&c->cmsg_type==SCM_RIGHTS)
+      for(size_t i=0;i<(c->cmsg_len-CMSG_LEN(0))/sizeof(int);++i){int fd;std::memcpy(&fd,CMSG_DATA(c)+i*sizeof(int),sizeof(int));fds.push_back(fd);}
+  // Header: {"version": 1, "count": N, "size": BYTES}
+  std::string h(text,n>0?size_t(n):0);auto sz=h.find("\"size\":");
+  size_t size=sz==std::string::npos?0:std::strtoull(h.c_str()+sz+7,nullptr,10);
+  if(n<=0||(m.msg_flags&MSG_CTRUNC)||h.find("\"version\": 1")==std::string::npos||size<(1u<<20)||fds.size()<2){
+    for(int fd:fds) close(fd);return out;
+  }
+  for(int fd:fds) out.push_back({fd,size});
+  return out;
+}
+void return_capture_pool(std::vector<PoolBuffer>& pool){for(auto& p:pool) if(p.fd>=0) close(p.fd);pool.clear();}
 namespace {
 int ctl(int fd,unsigned long op,void* p) {int r;do {r=ioctl(fd,op,p);}while(r<0&&errno==EINTR);return r;}
+// Imported dma-bufs are not cache-managed by vb2 on DQBUF/QBUF; bracket CPU reads explicitly.
+void cpu_access(int fd,uint64_t flags){dma_buf_sync s{};s.flags=flags|DMA_BUF_SYNC_READ;ctl(fd,DMA_BUF_IOCTL_SYNC,&s);}
 void check(int r,const char* msg) {if(r<0)throw std::runtime_error(std::string(msg)+": "+std::strerror(errno));}
 // Same errno set the server advertises as RKMoonDisplayStatus=no_signal.
 void query_timings(int fd,v4l2_dv_timings& t,const char* msg) {
@@ -75,14 +108,56 @@ void Capture::validate(const Config& c) const {
   uint64_t bytes=uint64_t(layout.stride)*layout.height*(layout.pixels==Pixels::nv12?3:2)/2;
   if(layout.stride<uint64_t(layout.width)*(layout.pixels==Pixels::bgr24?3:1)||bytes!=layout.sizeimage) throw std::runtime_error("ambiguous packed plane layout/sizeimage");
 }
-void Capture::start(bool export_dma) {
+void Capture::start(bool export_dma,const std::vector<PoolBuffer>* pool) {
   if(streaming_||!buffers_.empty()) throw std::runtime_error("capture already started");
   // Advisory lock protects cooperating instances, NOT older services. Operator must grant ownership.
   check(flock(fd_.get(),LOCK_EX|LOCK_NB),"capture advisory lock");
   v4l2_event_subscription sub{};sub.type=V4L2_EVENT_SOURCE_CHANGE;
   if(ctl(fd_.get(),VIDIOC_SUBSCRIBE_EVENT,&sub)<0&&errno!=EINVAL) check(-1,"SUBSCRIBE_EVENT");
+  if(pool&&!pool->empty()) {
+    try { start_pool(*pool); }
+    catch(const std::exception& e) {
+      std::cerr<<"{\"kind\":\"capture_pool_unused\",\"reason\":\""<<e.what()<<"\"}\n";
+      free_buffers();
+    }
+    if(streaming_) return;
+  }
+  start_mmap(export_dma);
+}
+void Capture::free_buffers() {
+  if(streaming_){auto type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;ctl(fd_.get(),VIDIOC_STREAMOFF,&type);streaming_=false;}
+  for(auto& b:buffers_) if(b.data) munmap(b.data,b.size);
+  buffers_.clear();
+  v4l2_requestbuffers req{};req.count=0;req.type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;req.memory=memory_;
+  ctl(fd_.get(),VIDIOC_REQBUFS,&req);
+  memory_=V4L2_MEMORY_MMAP;
+}
+void Capture::start_pool(const std::vector<PoolBuffer>& pool) {
+  // ADR-013: buffers are CMA-contiguous dma-bufs allocated at boot, so a long-running host
+  // never needs a fresh multi-megabyte contiguous allocation when a session starts.
+  size_t usable=0;
+  for(const auto& p:pool) if(p.fd>=0&&p.size>=layout.sizeimage) ++usable; else break;
+  if(usable<2) throw std::runtime_error("pool buffers smaller than this mode");
+  memory_=V4L2_MEMORY_DMABUF;
+  v4l2_requestbuffers req{};req.count=uint32_t(std::min<size_t>(usable,4));req.type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;req.memory=memory_;
+  check(ctl(fd_.get(),VIDIOC_REQBUFS,&req),"REQBUFS(DMABUF)");
+  if(req.count<2||req.count>std::min<size_t>(usable,4)) throw std::runtime_error("unexpected pooled buffer count");
+  buffers_.resize(req.count);
+  for(uint32_t i=0;i<req.count;++i) {
+    auto& dst=buffers_[i];dst.size=pool[i].size;
+    dst.dma.reset(fcntl(pool[i].fd,F_DUPFD_CLOEXEC,3));check(dst.dma.get(),"dup pool buffer");
+    dst.data=mmap(nullptr,dst.size,PROT_READ,MAP_SHARED,dst.dma.get(),0);
+    if(dst.data==MAP_FAILED){dst.data=nullptr;check(-1,"mmap pool buffer");}
+    dst.dequeued=true;release(i);
+  }
+  auto type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+  check(ctl(fd_.get(),VIDIOC_STREAMON,&type),"STREAMON(DMABUF)");streaming_=true;
+  std::cerr<<"{\"kind\":\"capture_pool\",\"buffers\":"<<req.count<<",\"buffer_bytes\":"<<pool[0].size<<"}\n";
+}
+void Capture::start_mmap(bool export_dma) {
+  memory_=V4L2_MEMORY_MMAP;
   v4l2_requestbuffers req{};req.count=4;req.type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;req.memory=V4L2_MEMORY_MMAP;
-  check(ctl(fd_.get(),VIDIOC_REQBUFS,&req),"REQBUFS; do not change CMA/boot settings automatically");
+  check(ctl(fd_.get(),VIDIOC_REQBUFS,&req),"REQBUFS (per-session CMA allocation; boot-time pool unavailable)");
   if(req.count<2||req.count>4) throw std::runtime_error("unexpected capture buffer count");
   buffers_.resize(req.count);
   for(uint32_t i=0;i<req.count;++i) {
@@ -105,7 +180,9 @@ void Capture::start(bool export_dma) {
 void Capture::release(uint32_t i) {
   auto& buf=buffers_.at(i);
   if(!buf.dequeued) throw std::runtime_error("double QBUF");
-  v4l2_plane p{};v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;b.memory=V4L2_MEMORY_MMAP;b.index=i;b.length=1;b.m.planes=&p;
+  if(memory_==V4L2_MEMORY_DMABUF&&buf.cpu){cpu_access(buf.dma.get(),DMA_BUF_SYNC_END);buf.cpu=false;}
+  v4l2_plane p{};v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;b.memory=memory_;b.index=i;b.length=1;b.m.planes=&p;
+  if(memory_==V4L2_MEMORY_DMABUF){p.m.fd=buf.dma.get();p.length=uint32_t(buf.size);}
   check(ctl(fd_.get(),VIDIOC_QBUF,&b),"QBUF");buf.dequeued=false;
 }
 Capture::Frame Capture::latest(std::chrono::milliseconds timeout) {
@@ -116,9 +193,10 @@ Capture::Frame Capture::latest(std::chrono::milliseconds timeout) {
   Frame latest{};bool have=false;
   // Bound drain to the buffer count; QBUF may allow new frames while draining.
   for(size_t attempt=0;attempt<buffers_.size();++attempt) {
-    v4l2_plane plane{};v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;b.memory=V4L2_MEMORY_MMAP;b.length=1;b.m.planes=&plane;
+    v4l2_plane plane{};v4l2_buffer b{};b.type=V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;b.memory=memory_;b.length=1;b.m.planes=&plane;
     if(ctl(fd_.get(),VIDIOC_DQBUF,&b)<0){if(errno==EAGAIN)break;check(-1,"DQBUF");}
     auto& buf=buffers_.at(b.index);if(buf.dequeued) throw std::runtime_error("duplicate DQBUF");buf.dequeued=true;
+    if(memory_==V4L2_MEMORY_DMABUF){cpu_access(buf.dma.get(),DMA_BUF_SYNC_START);buf.cpu=true;}
     if(plane.bytesused>buf.size||plane.data_offset>plane.bytesused||plane.bytesused-plane.data_offset<layout.sizeimage) throw std::runtime_error("invalid capture plane bounds");
     if(b.flags&V4L2_BUF_FLAG_ERROR){release(b.index);++raw_skipped;continue;}
     if(have){release(latest.index);++raw_skipped;}

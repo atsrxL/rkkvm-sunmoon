@@ -19,7 +19,7 @@ void write_file(int fd,const std::vector<uint8_t>& data){size_t at=0;while(at<da
 int main(int argc,char** argv){
   using namespace rkmoon;using namespace std::chrono_literals;
   signal(SIGTERM,stop);signal(SIGINT,stop);signal(SIGPIPE,SIG_IGN);
-  Config c;std::string device="/dev/video0",output,stats;uint32_t seconds=60,idr_at=30;int ipc=-1;
+  Config c;std::string device="/dev/video0",output,stats,pool_socket;uint32_t seconds=60,idr_at=30;int ipc=-1;
   bool probe=false,allow_copy=false,authorized=false,placeholder=false;
   try {
     for(int i=1;i<argc;++i){std::string k=argv[i];
@@ -29,7 +29,7 @@ int main(int argc,char** argv){
       if(k=="--allow-1440p90-experiment"){c.allow_1440p90_experiment=true;continue;}
       if(++i>=argc)throw std::runtime_error("missing option value");
       std::string v=argv[i];
-      if(k=="--device")device=v;else if(k=="--output")output=v;else if(k=="--stats")stats=v;
+      if(k=="--device")device=v;else if(k=="--output")output=v;else if(k=="--stats")stats=v;else if(k=="--capture-pool")pool_socket=v;
       else if(k=="--width")c.width=number(v);else if(k=="--height")c.height=number(v);else if(k=="--fps-x100")c.fps_x100=number(v);
       else if(k=="--bitrate")c.bitrate=number(v);else if(k=="--gop")c.gop=number(v);else if(k=="--seconds")seconds=number(v);
       else if(k=="--idr-at")idr_at=number(v);else if(k=="--ipc-fd")ipc=int(number(v));
@@ -102,11 +102,15 @@ int main(int argc,char** argv){
     emit("seq,driver_seq,driver_timestamp_us,driver_timestamp_flags,dequeue_us,submit_us,done_us,bytes,idr,raw_skipped,dmabuf\n");
     // Destruction order is intentional: enc dies before cap on all exits, including exceptions.
     std::unique_ptr<Capture> capture;std::unique_ptr<Encoder> encoder;
+    // ADR-013: boot-time contiguous buffers; empty when the pool service is absent.
+    auto pool=borrow_capture_pool(pool_socket);
+    if(!pool_socket.empty()&&pool.empty())std::cerr<<"{\"kind\":\"capture_pool_unavailable\"}\n";
+    struct PoolGuard{std::vector<PoolBuffer>& p;~PoolGuard(){return_capture_pool(p);}} pool_guard{pool};
     auto open_pipeline=[&]{
       auto next=std::make_unique<Capture>(device);next->describe();
       // A different source mode is not a transient fault: the client must renegotiate.
       try{next->validate(c);}catch(const std::exception& e){throw ModeChanged(e.what());}
-      next->start(direct_layout(next->layout));
+      next->start(direct_layout(next->layout),&pool);
       auto e=std::make_unique<Encoder>();e->open(c,next->layout,&next->buffers(),allow_copy);
       encoder.reset();capture=std::move(next);encoder=std::move(e);
     };
@@ -171,5 +175,11 @@ int main(int argc,char** argv){
       }
     }
     return 0;
-  }catch(const std::exception& e){std::cerr<<"rkmoon-worker: "<<e.what()<<'\n';return 75;}
+  }catch(const std::exception& e){
+    std::cerr<<"rkmoon-worker: "<<e.what()<<'\n';
+    // Tell the server why, so its session log names the cause instead of "IPC peer closed".
+    if(ipc>=0){try{std::string why=e.what();if(why.size()>1000)why.resize(1000);
+      Message m;m.h.kind=Kind::error;m.bytes.assign(why.begin(),why.end());m.h.size=uint32_t(m.bytes.size());send(ipc,m,200ms);}catch(...){}}
+    return 75;
+  }
 }

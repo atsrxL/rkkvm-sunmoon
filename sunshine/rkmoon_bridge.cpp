@@ -42,8 +42,13 @@ std::vector<std::string> args(const rkmoon::Config& c,bool placeholder){
     "--width",std::to_string(c.width),"--height",std::to_string(c.height),"--fps-x100",std::to_string(c.fps_x100),"--bitrate",std::to_string(c.bitrate),"--gop",std::to_string(std::clamp((c.fps_x100+50)/100,1U,120U)),"--ack-capture-ownership"};
   if(c.allow_1440p90_experiment&&c.fps_x100>=8900) a.push_back("--allow-1440p90-experiment");
   if(yes("RKMOON_ALLOW_COPY")) a.push_back("--allow-copy");
+  if(!env("RKMOON_CAPTURE_POOL").empty()){a.push_back("--capture-pool");a.push_back(env("RKMOON_CAPTURE_POOL"));}
   if(placeholder) a.push_back("--no-signal-placeholder");
   return a;
+}
+// The worker reports its failure reason as an error message before exiting.
+void check_worker_error(const rkmoon::Message& m){
+  if(m.h.kind==rkmoon::Kind::error)throw std::runtime_error("worker: "+std::string(m.bytes.begin(),m.bytes.end()));
 }
 void release_input(){std::shared_ptr<rkmoon::HidClient> old;{std::lock_guard lock(input_mutex);old=std::move(input);}old.reset();}
 // Input is optional for a session: video keeps streaming while the HID lease is refused or
@@ -99,6 +104,7 @@ void capture(safe::mail_t mail,video::config_t config,void* channel_data){
     if(placeholder)BOOST_LOG(info)<<"RKMoon no HDMI signal: starting input session with black placeholder video";
     rkmoon::Child worker(env("RKMOON_WORKER"),args(c,placeholder));
     auto ready=rkmoon::receive(worker.fd(),3000ms);
+    check_worker_error(ready);
     if(ready.h.kind!=rkmoon::Kind::ready||ready.h.width!=c.width||ready.h.height!=c.height||ready.h.codec!=c.codec||ready.h.extra!=c.fps_x100)throw std::runtime_error("capture negotiation failed");
     // HDMI is the entire input viewport. No T6 desktop layout or logical scaling.
     mail->event<::input::touch_port_t>(mail::touch_port)->raise(::input::touch_port_t{
@@ -123,7 +129,7 @@ void capture(safe::mail_t mail,video::config_t config,void* channel_data){
         if(rkmoon::now_us()-last_progress>7000000)throw std::runtime_error("HDMI/worker stalled");
         continue;
       }
-      auto frame=rkmoon::receive(worker.fd(),300ms);gate.accept(frame);
+      auto frame=rkmoon::receive(worker.fd(),300ms);check_worker_error(frame);gate.accept(frame);
       if(frame.h.width!=c.width||frame.h.height!=c.height||frame.h.codec!=c.codec)throw std::runtime_error("frame format epoch mismatch");
       auto now=rkmoon::now_us();
       if(frame.h.done_us>now+1000||frame.h.dequeue_us>now)throw std::runtime_error("frame timestamps from the future");

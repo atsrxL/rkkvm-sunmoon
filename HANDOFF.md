@@ -112,3 +112,20 @@ T6 当前运行 /home/at/rkmoon-r3/（rkmoon-kvm 8c7cbf8a…，worker 647c109e�
 ## 正式安装布局（2026-09-24 晚）
 
 T6 服务端已从 home 下的散落目录迁到 /opt/rkmoon/releases/20260924-r9（current 链接），配置 /etc/rkmoon/runtime.json，状态 /var/lib/rkmoon。rkmoon、rkmoon-edid、rkmoon-hdmirx-audio、rkmoon-input 全部开机自启，EDID 开机自动写入。打包/安装/回滚见 docs/SERVER-INSTALL.md。旧临时服务 rkmoon-http-live 已停止；旧运行目录（/home/at/rkmoon-*、/usr/local/lib/rkmoon、/opt/rkmoon-input-venv、/opt/rkmoon-kvmd-source 及 /root/agent.backup 下的旧 rkmoon 备份）已于同日删除，约 2GB；只保留原始 EDID 备份。回滚只能用 /opt/rkmoon/releases 里的发布。HID 桥在 USB 离线时不再退出，而是拒绝租约直到按键释放成功。尚未做整机重启验证。
+
+## RP2350 HID 桥 Windows 测试客户端（2026-09-28，ADR-012）
+
+tools/rp2350-client/：Qt 6.8.3 Widgets + QSerialPort，直接通过串口使用板子协议 v1（HELLO/INFO、200 ms PING/PONG、捕获区键鼠、RELEASE_ALL、"rkmoon" 输入测试）。协议/CRC 在 src/rp2350_protocol.*，不依赖界面。共享测试向量 docs/rp2350-protocol-vectors.json（本任务先定义，固件应复用）。ADR-012 补充了：PIO-USB 引脚 GP12=D+、GP13=D-（官方原理图与示例），两个 Type-C 口 VBUS 直连 VSYS 的供电警告，精确的重新同步规则、长度/seq/buttons 约定，以及 CRC 错误时的 NAK 不能用来重发。
+离线结果：Mac Qt 6.11.2 核心测试 12/12；Windows VM9007 Qt 6.8.3/VS2022 完整 QtTest 17/17，打包后 4 秒干净 PATH 启动冒烟通过。交付 smb://192.168.123.10/zssd/Target/RKMoon-RP2350-Client，30 个文件，delivery-manifest.json SHA256 682caedf8e191d019d8fb78ed18799ac7deb3fc475e642142c373b63ba7eeb9b，Mac 与 Windows UNC 两侧逐文件读回一致。
+**未接真板子**：真实 COM 口、HID 枚举、被控机输入和看门狗均未测试。VM9007（手工 ZFS 链接克隆 env-admin-ssh）已停机，清理截止 2026-09-29 15:05:22 CST。
+
+## RP2350 HID 桥固件（2026-09-28，ADR-012）
+
+firmware/rp2350-hid/：pico-sdk 2.3.1 + 自带 TinyUSB 0.18.0，复合 HID（boot 键盘、相对鼠标 int16、绝对指针，remote wakeup），UART0 GP0/GP1 1 Mbaud 协议 v1，500 ms 看门狗全释放，相对移动拆分/合并，WS2812 灯。协议、CRC、看门狗和报告队列在 src/core（与硬件无关）。编译用 `firmware/rp2350-hid/tools/build.sh`（Docker，依赖 commit 见 deps.lock）。主机测试 200712 项 0 失败（含共享向量）；固件仅编译验证，**未上板**。uf2 SHA256 351562e62cef259720ef57986ffc82f80e8240e176c7db1c388fb7354785da31，已交付 Target/RKMoon-RP2350-HID 并读回一致。PIO-USB CDC 通道未实现（TinyUSB 单设备栈，原因见固件 README）。ADR-012 补充了 NAK 原因 5（版本）、6（未建立会话）、挂起时的处理和队列细节，Windows 客户端对未知原因码只显示数字即可。
+
+## 采集缓冲池（2026-09-28，ADR-013，r12）
+
+根因：T6 运行 4 天后 CMA 碎片化，worker 每次会话 REQBUFS(MMAP) 申请 6 MB 连续内存失败（dmesg cma_alloc ret -16），客户端表现为画面一闪即断。修复：新增 rkmoon-capture-pool.service（root，仅分配 dma-buf 并经 SCM_RIGHTS 借给 at），开机分配 4×24,883,200 字节并常驻；worker `--capture-pool` 以 V4L2 DMABUF 入队，CPU 读取前后做 DMA_BUF_IOCTL_SYNC；池不可用时回退 MMAP 并记日志；worker 失败原因经 IPC 进入 sunshine.log。未改 CMA 大小、内核或引导参数。
+发布 20260928-r12（tar SHA256 c7e668f75b9be7775e9013e5e3c3432da9e74a5284991e52fba277205fcd645c，worker 5979dbfe…，kvm 9d1735c6…）。r11 为同源但缺 cache sync 的中间版本，不要激活。
+实机：碎片化状态下池分配 5 次均失败（证实运行时无法恢复），重启 T6 后开机即 ready，CmaAllocated≈106 MB；独立 worker 1080p60 HEVC 3 s 走池化路径（capture_pool buffers=4），175 帧，Mac ffmpeg 解码无错，画面正常。离线测试 117 项通过（2 跳过）。**Windows 客户端连接由用户实测待确认。**
+注意：rkmoon-capture-pool 不要随意 restart；若失败只能重启 T6。

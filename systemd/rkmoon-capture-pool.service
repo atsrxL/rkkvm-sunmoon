@@ -1,0 +1,23 @@
+[Unit]
+Description=RKMoon HDMI capture buffer pool (contiguous memory held from boot)
+DefaultDependencies=no
+After=systemd-modules-load.service local-fs.target
+Before=rkmoon.service
+Conflicts=shutdown.target
+# A fragmented CMA area does not heal at runtime; stop retrying after a few attempts.
+StartLimitIntervalSec=600
+StartLimitBurst=4
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/rkmoon/current/tools/capture_pool.py --user @USER@
+Restart=on-failure
+RestartSec=30
+RuntimeDirectory=rkmoon-capture-pool
+RuntimeDirectoryPreserve=yes
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateNetwork=yes
+
+[Install]
+WantedBy=multi-user.target

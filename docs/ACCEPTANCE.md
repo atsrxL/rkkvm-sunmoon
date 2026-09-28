@@ -126,3 +126,24 @@
 | worker 占位模式（T6 实机，真实 MPP，IPC 协议驱动） | 通过（实机） | 5 秒 51 帧 ≈10fps，首帧 IDR 841B，P 帧 ≤42B，stop 正常退出 0；未打开 HDMI 设备 |
 | 客户端 Connect 只显示信息、Start/无信号可启动 | 通过（Mac 离线） | Qt 26/26 |
 | 无信号经客户端进入黑屏并用键鼠唤醒、信号出现后切到真实模式 | 未测试 | 需用户用新 Windows 客户端实测 |
+
+## RP2350 HID 桥固件（ADR-012，2026-09-28）
+
+| 项目 | 状态 | 证据/限定 |
+|---|---|---|
+| 协议解析/CRC/看门狗/拆分合并 主机单元测试 | 通过（离线） | Mac clang 与 Docker gcc 13.3，ASan/UBSan，200712 项检查 0 失败，含共享向量 docs/rp2350-protocol-vectors.json |
+| 固件交叉编译（pico-sdk 2.3.1，板型 waveshare_rp2350_usb_c，自带头文件） | 通过（仅编译） | arm-none-eabi-gcc 13.2.1；uf2 351562e6…，elf 08eb4e42…；text 28424 B |
+| Target 交付 RKMoon-RP2350-HID | 通过 | uf2 读回 cmp 一致，SHA256 351562e62cef259720ef57986ffc82f80e8240e176c7db1c388fb7354785da31 |
+| 上板：枚举、键鼠输入、boot 协议、remote wakeup、灯色、UART 1 Mbaud、500 ms 释放 | 未测试 | 未上板 |
+| PIO-USB CDC 控制通道 B | 未实现 | TinyUSB 单设备栈，编译开关关闭，见固件 README |
+
+## 采集缓冲池 ADR-013（2026-09-28，r12）
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| VM301 ARM64 构建 worker+kvm | 通过 | worker 5979dbfe…，kvm 9d1735c6… |
+| 离线测试 | 通过 | 117 项，2 跳过 |
+| 开机池分配（T6 实机） | 通过 | 4×24,883,200 B，socket at:0600 |
+| 碎片化后运行时分配 | 失败（预期） | 需重启，已记录 |
+| worker 池化 1080p60 HEVC 实机采集+编码+独立解码 | 通过 | 175 帧，ffmpeg 无错，画面正常 |
+| Windows 客户端连接 | 未测试 | 待用户实测 |

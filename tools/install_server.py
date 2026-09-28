@@ -17,7 +17,7 @@ PREFIX = Path('/opt/rkmoon')
 CONFIG = Path('/etc/rkmoon/runtime.json')
 STATE = Path('/var/lib/rkmoon')
 UNITS = Path('/etc/systemd/system')
-ORDER = ['rkmoon-hdmirx-audio.service', 'rkmoon-edid.service', 'rkmoon.service']
+ORDER = ['rkmoon-hdmirx-audio.service', 'rkmoon-edid.service', 'rkmoon-capture-pool.service', 'rkmoon.service']
 
 
 def run(*args, check=True):
@@ -141,6 +141,10 @@ def main():
     run('systemctl', 'enable', *ORDER)
     if a.start:
         run('systemctl', 'start', 'rkmoon-hdmirx-audio.service', 'rkmoon-edid.service')
+        # The pool keeps buffers allocated at its first start; restarting it would free and
+        # re-request them from a possibly fragmented area, so only start it when absent.
+        if subprocess.run(['systemctl', 'is-active', '--quiet', 'rkmoon-capture-pool.service']).returncode:
+            run('systemctl', 'start', 'rkmoon-capture-pool.service', check=False)
         run('systemctl', 'restart', 'rkmoon.service')
         run('systemctl', '--no-pager', 'status', 'rkmoon.service', check=False)
     else:

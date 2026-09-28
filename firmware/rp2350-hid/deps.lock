@@ -1,0 +1,11 @@
+# Pinned dependencies for firmware/rp2350-hid (see README.md)
+PICO_SDK_URL=https://github.com/raspberrypi/pico-sdk.git
+PICO_SDK_TAG=2.3.1
+PICO_SDK_COMMIT=079c6f39023649b154152db30f1d781e884879bc
+TINYUSB_COMMIT=86ad6e56c1700e85f1c5678607a762cfe3aa2f47
+PICO_PIO_USB_URL=https://github.com/sekigon-gonnoc/Pico-PIO-USB.git
+PICO_PIO_USB_TAG=0.7.2
+PICO_PIO_USB_COMMIT=3c1eec341a5232640e4c00628b889b641af34b28
+PICOTOOL_URL=https://github.com/raspberrypi/picotool.git
+PICOTOOL_TAG=2.3.1
+PICOTOOL_COMMIT=2041936441b48a3cc53ae3da9e805229fe8f4e18

@@ -11,8 +11,8 @@ import argparse, hashlib, json, os, shutil, subprocess, tarfile, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TOOLS = ['run.py', 'child_exec.py', 'systemd_release.py', 'hdmirx_audio_bind.py', 'edid_apply.py', 'install_server.py']
-UNITS = ['rkmoon.service', 'rkmoon-edid.service', 'rkmoon-hdmirx-audio.service']
+TOOLS = ['run.py', 'child_exec.py', 'systemd_release.py', 'hdmirx_audio_bind.py', 'edid_apply.py', 'install_server.py', 'capture_pool.py']
+UNITS = ['rkmoon.service', 'rkmoon-edid.service', 'rkmoon-hdmirx-audio.service', 'rkmoon-capture-pool.service']
 CONFIG = ['rkmoon-edid-eight-modes.bin', 'edid-requested-modes.json']
 
 

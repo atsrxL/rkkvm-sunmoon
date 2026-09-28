@@ -1,8 +1,8 @@
 # Installed by tools/install_server.py, which replaces @USER@ with the streaming account.
 [Unit]
 Description=RKMoon HDMI to Moonlight KVM server
-Wants=network-online.target rkmoon-hdmirx-audio.service rkmoon-edid.service rkmoon-input.service
-After=network-online.target rkmoon-hdmirx-audio.service rkmoon-edid.service rkmoon-input.service
+Wants=network-online.target rkmoon-hdmirx-audio.service rkmoon-edid.service rkmoon-input.service rkmoon-capture-pool.service
+After=network-online.target rkmoon-hdmirx-audio.service rkmoon-edid.service rkmoon-input.service rkmoon-capture-pool.service
 StartLimitIntervalSec=300
 StartLimitBurst=20
 

@@ -1,0 +1,308 @@
+{
+  "description": "RKMoon RP2350 HID bridge serial protocol v1 shared test vectors (ADR-012). Generated independently in Python; firmware and Windows client both test against this file.",
+  "protocol": 1,
+  "max_payload": 32,
+  "sof": "0xA5",
+  "crc": {
+    "algorithm": "CRC-16/CCITT-FALSE",
+    "poly": "0x1021",
+    "init": "0xFFFF",
+    "refin": false,
+    "refout": false,
+    "xorout": "0x0000",
+    "covers": "type,seq,len,payload",
+    "byte_order": "little-endian",
+    "check_ascii": "123456789",
+    "check": "0x29B1"
+  },
+  "frames": [
+    {
+      "name": "hello",
+      "direction": "host_to_board",
+      "type": 1,
+      "seq": 0,
+      "fields": {
+        "proto": 1
+      },
+      "payload_hex": "01",
+      "frame_hex": "a50100010164d1"
+    },
+    {
+      "name": "keyboard_lctrl_lshift_a",
+      "direction": "host_to_board",
+      "type": 2,
+      "seq": 1,
+      "fields": {
+        "modifiers": 3,
+        "keys": [
+          4,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "payload_hex": "03040000000000",
+      "frame_hex": "a502010703040000000000abcd"
+    },
+    {
+      "name": "keyboard_rgui_ralt_six_keys",
+      "direction": "host_to_board",
+      "type": 2,
+      "seq": 2,
+      "fields": {
+        "modifiers": 192,
+        "keys": [
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "payload_hex": "c0040506070809",
+      "frame_hex": "a5020207c0040506070809a6d7"
+    },
+    {
+      "name": "keyboard_all_released",
+      "direction": "host_to_board",
+      "type": 2,
+      "seq": 3,
+      "fields": {
+        "modifiers": 0,
+        "keys": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "payload_hex": "00000000000000",
+      "frame_hex": "a502030700000000000000efd5"
+    },
+    {
+      "name": "mouse_rel_basic",
+      "direction": "host_to_board",
+      "type": 3,
+      "seq": 4,
+      "fields": {
+        "buttons": 1,
+        "dx": 10,
+        "dy": -5,
+        "wheel": 1,
+        "pan": -1
+      },
+      "payload_hex": "010a00fbff01ff",
+      "frame_hex": "a5030407010a00fbff01ff9256"
+    },
+    {
+      "name": "mouse_rel_extremes",
+      "direction": "host_to_board",
+      "type": 3,
+      "seq": 5,
+      "fields": {
+        "buttons": 31,
+        "dx": -32768,
+        "dy": 32767,
+        "wheel": -128,
+        "pan": 127
+      },
+      "payload_hex": "1f0080ff7f807f",
+      "frame_hex": "a50305071f0080ff7f807f1a54"
+    },
+    {
+      "name": "mouse_abs_center",
+      "direction": "host_to_board",
+      "type": 4,
+      "seq": 6,
+      "fields": {
+        "buttons": 0,
+        "x": 16384,
+        "y": 16384,
+        "wheel": 0,
+        "pan": 0
+      },
+      "payload_hex": "00004000400000",
+      "frame_hex": "a50406070000400040000059dd"
+    },
+    {
+      "name": "mouse_abs_max_right_button",
+      "direction": "host_to_board",
+      "type": 4,
+      "seq": 7,
+      "fields": {
+        "buttons": 2,
+        "x": 32767,
+        "y": 0,
+        "wheel": -1,
+        "pan": 0
+      },
+      "payload_hex": "02ff7f0000ff00",
+      "frame_hex": "a504070702ff7f0000ff006375"
+    },
+    {
+      "name": "release_all",
+      "direction": "host_to_board",
+      "type": 5,
+      "seq": 8,
+      "fields": {},
+      "payload_hex": "",
+      "frame_hex": "a5050800c5ae"
+    },
+    {
+      "name": "ping",
+      "direction": "host_to_board",
+      "type": 6,
+      "seq": 255,
+      "fields": {},
+      "payload_hex": "",
+      "frame_hex": "a506ff00c37d"
+    },
+    {
+      "name": "info",
+      "direction": "board_to_host",
+      "type": 129,
+      "seq": 0,
+      "fields": {
+        "proto": 1,
+        "fw_major": 0,
+        "fw_minor": 1,
+        "caps": 15,
+        "serial_hex": "e6614103e7452d2f"
+      },
+      "payload_hex": "0100010fe6614103e7452d2f",
+      "frame_hex": "a581000c0100010fe6614103e7452d2ff8f2"
+    },
+    {
+      "name": "pong_configured",
+      "direction": "board_to_host",
+      "type": 134,
+      "seq": 255,
+      "fields": {
+        "status": 1,
+        "rx_errors": 0,
+        "dropped": 0
+      },
+      "payload_hex": "0100000000",
+      "frame_hex": "a586ff0501000000005500"
+    },
+    {
+      "name": "pong_suspended_watchdog",
+      "direction": "board_to_host",
+      "type": 134,
+      "seq": 16,
+      "fields": {
+        "status": 10,
+        "rx_errors": 4660,
+        "dropped": 65535
+      },
+      "payload_hex": "0a3412ffff",
+      "frame_hex": "a58610050a3412ffffb4a8"
+    },
+    {
+      "name": "nak_unknown_type",
+      "direction": "board_to_host",
+      "type": 128,
+      "seq": 17,
+      "fields": {
+        "orig_type": 7,
+        "reason": 3
+      },
+      "payload_hex": "0703",
+      "frame_hex": "a580110207035b99"
+    },
+    {
+      "name": "nak_usb_not_ready",
+      "direction": "board_to_host",
+      "type": 128,
+      "seq": 18,
+      "fields": {
+        "orig_type": 2,
+        "reason": 4
+      },
+      "payload_hex": "0204",
+      "frame_hex": "a58012020204958d"
+    }
+  ],
+  "decode_streams": [
+    {
+      "name": "two_frames_back_to_back",
+      "stream_hex": "a5062000da78a5012101019260",
+      "expect": [
+        {
+          "type": 6,
+          "seq": 32,
+          "payload_hex": ""
+        },
+        {
+          "type": 1,
+          "seq": 33,
+          "payload_hex": "01"
+        }
+      ],
+      "rx_errors": 0,
+      "note": ""
+    },
+    {
+      "name": "leading_garbage_skipped",
+      "stream_hex": "001337ffa5062000da78",
+      "expect": [
+        {
+          "type": 6,
+          "seq": 32,
+          "payload_hex": ""
+        }
+      ],
+      "rx_errors": 0,
+      "note": "bytes other than 0xA5 while hunting are skipped silently"
+    },
+    {
+      "name": "bad_crc_then_good",
+      "stream_hex": "a5062000da87a5012101019260",
+      "expect": [
+        {
+          "type": 1,
+          "seq": 33,
+          "payload_hex": "01"
+        }
+      ],
+      "rx_errors": 1,
+      "note": "bad CRC: count 1 error, drop only the 0xA5 and rescan"
+    },
+    {
+      "name": "length_over_32",
+      "stream_hex": "a5020021a5062000da78",
+      "expect": [
+        {
+          "type": 6,
+          "seq": 32,
+          "payload_hex": ""
+        }
+      ],
+      "rx_errors": 1,
+      "note": "len>32: count 1 error, drop only the 0xA5 and rescan"
+    },
+    {
+      "name": "truncated_frame_then_good",
+      "stream_hex": "a50207070004a5062000da78a5062000da78",
+      "expect": [
+        {
+          "type": 6,
+          "seq": 32,
+          "payload_hex": ""
+        },
+        {
+          "type": 6,
+          "seq": 32,
+          "payload_hex": ""
+        }
+      ],
+      "rx_errors": 1,
+      "note": "truncated KEYBOARD swallows the first PING bytes; CRC fails; rescan from byte after the bad 0xA5 recovers the first PING and the second"
+    }
+  ]
+}

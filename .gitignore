@@ -13,3 +13,4 @@ __pycache__/
 *.p12
 *.secret.json
 /results/local/
+/firmware/rp2350-hid/tests/build/

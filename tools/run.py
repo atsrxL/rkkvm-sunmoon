@@ -109,6 +109,8 @@ def base_env(c,state):
     e.pop('RKMOON_ADMIN_SOCKET',None)
     if c['audio']['enabled']:e['RKMOON_AUDIO_DEVICE']=c['audio']['alsa_device']
     if c['input']['enabled']:e['RKMOON_HID_SOCKET']=str(state/'hid.sock')
+    # ADR-013 boot-time capture buffers; the worker falls back to per-session allocation without it.
+    e['RKMOON_CAPTURE_POOL']='/run/rkmoon-capture-pool/pool.sock'
     return e
 
 def check_ports():
