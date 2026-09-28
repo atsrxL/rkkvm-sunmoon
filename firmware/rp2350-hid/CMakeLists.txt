@@ -14,16 +14,8 @@ if (NOT PICO_BOARD STREQUAL "waveshare_rp2350_usb_c")
 endif ()
 set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Pico platform")
 
-# Experimental control channel B (CDC ACM on the PIO-USB port). See README:
-# TinyUSB in this SDK runs one device stack only, so this cannot coexist
-# with the native HID device. Kept as an explicit switch, default OFF.
-option(RKMOON_PIO_USB_CDC "Enable experimental PIO-USB CDC control channel" OFF)
-if (RKMOON_PIO_USB_CDC)
-    message(FATAL_ERROR
-        "RKMOON_PIO_USB_CDC=ON is not supported: TinyUSB (pico-sdk 2.3.1, 0.18.0) has a single "
-        "device stack (one usbd_device_t, HID class hard-codes rhport 0) and dcd_rp2040.c / "
-        "dcd_pio_usb.c are mutually exclusive via CFG_TUD_RPI_PIO_USB. See firmware/rp2350-hid/README.md.")
-endif ()
+option(RKMOON_PIO_USB_CDC "Enable independent PIO-USB CDC control channel" ON)
+set(RKMOON_CDC_PID "0x0002" CACHE STRING "PIO CDC product ID (internal testing)")
 
 set(RKMOON_USB_VID "0x1209" CACHE STRING "USB vendor ID")
 set(RKMOON_USB_PID "0x0001" CACHE STRING "USB product ID")
@@ -56,7 +48,7 @@ target_include_directories(rkmoon_rp2350_hid PRIVATE
 target_compile_definitions(rkmoon_rp2350_hid PRIVATE
     RKMOON_USB_VID=${RKMOON_USB_VID}
     RKMOON_USB_PID=${RKMOON_USB_PID}
-    RKMOON_PIO_USB_CDC=0
+    RKMOON_PIO_USB_CDC=$<BOOL:${RKMOON_PIO_USB_CDC}>
     RKMOON_WS2812_PIN=16
     RKMOON_UART_TX_PIN=0
     RKMOON_UART_RX_PIN=1
@@ -81,5 +73,28 @@ target_link_libraries(rkmoon_rp2350_hid PRIVATE
 pico_enable_stdio_uart(rkmoon_rp2350_hid 0)
 pico_enable_stdio_usb(rkmoon_rp2350_hid 0)
 pico_set_program_name(rkmoon_rp2350_hid "RKMoon HID Bridge")
-pico_set_program_version(rkmoon_rp2350_hid "0.1")
+pico_set_program_version(rkmoon_rp2350_hid "0.2")
 pico_add_extra_outputs(rkmoon_rp2350_hid)
+
+if(RKMOON_PIO_USB_CDC)
+    if(RKMOON_CDC_PID STREQUAL RKMOON_USB_PID)
+        message(FATAL_ERROR "CDC and HID must have distinct PIDs")
+    endif()
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(PIO_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../../build/rp2350-hid-deps/Pico-PIO-USB" CACHE PATH "Pinned PIO-USB source")
+    set(PIO_PATCHED "${CMAKE_CURRENT_BINARY_DIR}/pio-usb")
+    execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/tools/prepare_pio.py
+        ${PIO_SOURCE} ${PIO_PATCHED} RESULT_VARIABLE patch_result)
+    if(NOT patch_result EQUAL 0)
+        message(FATAL_ERROR "Pinned PIO-USB patch verification failed")
+    endif()
+    add_library(rkmoon_pio_ll STATIC ${PIO_PATCHED}/src/pio_usb.c
+        ${PIO_PATCHED}/src/pio_usb_device.c ${PIO_PATCHED}/src/usb_crc.c)
+    pico_generate_pio_header(rkmoon_pio_ll ${PIO_PATCHED}/src/usb_tx.pio)
+    pico_generate_pio_header(rkmoon_pio_ll ${PIO_PATCHED}/src/usb_rx.pio)
+    target_include_directories(rkmoon_pio_ll PUBLIC ${PIO_PATCHED}/src ${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(rkmoon_pio_ll PUBLIC pico_stdlib hardware_pio hardware_dma)
+    target_sources(rkmoon_rp2350_hid PRIVATE src/pio_cdc.c src/core/cdc_control.c)
+    target_compile_definitions(rkmoon_rp2350_hid PRIVATE RKMOON_CDC_PID=${RKMOON_CDC_PID})
+    target_link_libraries(rkmoon_rp2350_hid PRIVATE rkmoon_pio_ll pico_multicore)
+endif()

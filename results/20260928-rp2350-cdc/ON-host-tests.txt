@@ -1,0 +1,18 @@
+make: Entering directory '/src/firmware/rp2350-hid/tests'
+mkdir -p /tmp/tests
+python3 gen_vectors.py ../../../docs/rp2350-protocol-vectors.json /tmp/tests/vectors.h
+gcc -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion -Wno-sign-conversion -fsanitize=address,undefined -fno-omit-frame-pointer -I/tmp/tests -o /tmp/tests/test_core ../src/core/crc16.c ../src/core/proto.c ../src/core/bridge.c test_core.c test_vectors.c
+mkdir -p /tmp/tests
+gcc -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion -Wno-sign-conversion -fsanitize=address,undefined -fno-omit-frame-pointer -pthread -o /tmp/tests/test_cdc test_cdc.c ../src/core/cdc_control.c ../src/core/bridge.c ../src/core/proto.c ../src/core/crc16.c
+gcc -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion -Wno-sign-conversion -fsanitize=address,undefined -fno-omit-frame-pointer -DRKMOON_PIO_USB_CDC=0 -I/tmp/tests -o /tmp/tests/test_core_off ../src/core/crc16.c ../src/core/proto.c ../src/core/bridge.c test_core.c test_vectors.c
+mkdir -p /tmp/tests
+gcc -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion -Wno-sign-conversion -fsanitize=address,undefined -fno-omit-frame-pointer -Wno-unused-parameter -I. -I../src/core -o /tmp/tests/test_cdc_transport test_cdc_transport.c ../src/core/cdc_control.c ../src/core/bridge.c ../src/core/proto.c ../src/core/crc16.c
+/tmp/tests/test_core
+200718 checks, 0 failures
+/tmp/tests/test_core_off
+200718 checks, 0 failures
+/tmp/tests/test_cdc
+CDC: descriptors, requests + 100000 fuzz, SPSC 1000000 bytes, channel loss/switch: PASS
+/tmp/tests/test_cdc_transport
+CDC transport simulation: EP0 stages/abort/STALL, config, bulk/ZLP, DTR epoch, halt/reset: PASS (no hardware)
+make: Leaving directory '/src/firmware/rp2350-hid/tests'

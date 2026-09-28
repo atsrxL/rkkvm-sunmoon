@@ -1,0 +1,3 @@
+arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009
+cmake version 3.28.3
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0

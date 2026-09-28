@@ -560,3 +560,12 @@ void bridge_tick(bridge_t *b, uint32_t now_ms) {
         b->wd_event_ms = now_ms;
     }
 }
+
+void bridge_channel_lost(bridge_t *b, uint8_t channel) {
+    if (channel >= BRIDGE_NUM_CH) return;
+    proto_parser_reset(&b->parser[channel]);
+    if (b->active_ch == channel) {
+        b->active_ch = BRIDGE_CH_NONE;
+        // Preserve last_valid_ms: existing 500ms watchdog releases state.
+    }
+}

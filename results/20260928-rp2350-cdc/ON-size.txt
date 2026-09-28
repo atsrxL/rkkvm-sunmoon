@@ -1,0 +1,2 @@
+   text	   data	    bss	    dec	    hex	filename
+  47904	      0	  19436	  67340	  1070c	/src/build/rp2350-hid-ON/rkmoon_rp2350_hid.elf

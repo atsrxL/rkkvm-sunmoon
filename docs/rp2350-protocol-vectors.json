@@ -170,12 +170,12 @@
       "fields": {
         "proto": 1,
         "fw_major": 0,
-        "fw_minor": 1,
-        "caps": 15,
+        "fw_minor": 2,
+        "caps": 31,
         "serial_hex": "e6614103e7452d2f"
       },
-      "payload_hex": "0100010fe6614103e7452d2f",
-      "frame_hex": "a581000c0100010fe6614103e7452d2ff8f2"
+      "payload_hex": "0100021fe6614103e7452d2f",
+      "frame_hex": "a581000c0100021fe6614103e7452d2fc910"
     },
     {
       "name": "pong_configured",
@@ -304,5 +304,38 @@
       "rx_errors": 1,
       "note": "truncated KEYBOARD swallows the first PING bytes; CRC fails; rescan from byte after the bad 0xA5 recovers the first PING and the second"
     }
-  ]
+  ],
+  "firmware_info_variants": [
+    {
+      "name": "info_v01",
+      "direction": "board_to_host",
+      "type": 129,
+      "seq": 0,
+      "fields": {
+        "proto": 1,
+        "fw_major": 0,
+        "fw_minor": 1,
+        "caps": 15,
+        "serial_hex": "e6614103e7452d2f"
+      },
+      "payload_hex": "0100010fe6614103e7452d2f",
+      "frame_hex": "a581000c0100010fe6614103e7452d2ff8f2"
+    },
+    {
+      "name": "info_v02_uart",
+      "direction": "board_to_host",
+      "type": 129,
+      "seq": 0,
+      "fields": {
+        "proto": 1,
+        "fw_major": 0,
+        "fw_minor": 2,
+        "caps": 15,
+        "serial_hex": "e6614103e7452d2f"
+      },
+      "payload_hex": "0100020fe6614103e7452d2f",
+      "frame_hex": "a581000c0100020fe6614103e7452d2f3743"
+    }
+  ],
+  "firmware_info_variants_note": "Additional historical/UART-only vectors; frames keeps its original cardinality for the v0.1 Qt test harness. The main INFO now tests v0.2 CDC and unknown capability bit compatibility."
 }

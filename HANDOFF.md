@@ -129,3 +129,9 @@ firmware/rp2350-hid/：pico-sdk 2.3.1 + 自带 TinyUSB 0.18.0，复合 HID（boo
 发布 20260928-r12（tar SHA256 c7e668f75b9be7775e9013e5e3c3432da9e74a5284991e52fba277205fcd645c，worker 5979dbfe…，kvm 9d1735c6…）。r11 为同源但缺 cache sync 的中间版本，不要激活。
 实机：碎片化状态下池分配 5 次均失败（证实运行时无法恢复），重启 T6 后开机即 ready，CmaAllocated≈106 MB；独立 worker 1080p60 HEVC 3 s 走池化路径（capture_pool buffers=4），175 帧，Mac ffmpeg 解码无错，画面正常。离线测试 117 项通过（2 跳过）。**Windows 客户端连接由用户实测待确认。**
 注意：rkmoon-capture-pool 不要随意 restart；若失败只能重启 T6。
+
+## RP2350 HID 桥 v0.2 / PIO CDC 通道 B（2026-09-28 最新）
+
+通道 B 已实现，默认 ON，**编译/主机测试，未上板**；此条取代旧“PIO CDC 未实现”状态。原生 TinyUSB HID + UART A 保留，PIO 独立 CDC（1209:0002、唯一序列号）运行 core1，120 MHz；PIO0 TX/DMA0、PIO1 RX、PIO2 灯。INFO v1 长度不变、固件 0.2、caps bit4 表示 B。DTR/SOF/reset 失效清理会话，按原 500 ms 看门狗规则释放，恢复需 HELLO。
+Docker ON/OFF 编译通过；Mac/Docker ASan/UBSan 核心各 200718 检查零失败，CDC 请求/描述符/跨线程缓冲/状态机模拟通过。原客户端 Mac Qt 12/12，新能力位兼容，客户端源码没改、未重建 Windows、未开 VM。产物/hash/交付见 [本轮记录](results/20260928-rp2350-cdc/STATUS.md)。默认 UF2 位于 Target/RKMoon-RP2350-HID，未访问 T6。
+**PIO 控制线必须断 VBUS，只接 D+/D-/GND；两口 VBUS 在板上直连，禁止两根普通线连两台主机。** 实际枚举、时序、USB 输入、拔线/挂起/背压等均待用户上板。

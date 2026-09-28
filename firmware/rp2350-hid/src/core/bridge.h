@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
 #define BRIDGE_FW_MAJOR 0u
-#define BRIDGE_FW_MINOR 1u
+#define BRIDGE_FW_MINOR 2u
 
 #define BRIDGE_NUM_CH 2u
 #define BRIDGE_CH_UART 0u
@@ -48,7 +48,10 @@ extern "C" {
 #define BRIDGE_ABS_MAX 32767u
 #define BRIDGE_BUTTON_MASK 0x1Fu
 
-#define BRIDGE_CAPS 0x0Fu // keyboard | relative | absolute | remote wakeup
+#ifndef RKMOON_PIO_USB_CDC
+#define RKMOON_PIO_USB_CDC 1
+#endif
+#define BRIDGE_CAPS (0x0Fu | (RKMOON_PIO_USB_CDC ? 0x10u : 0u)) // bit4: channel B
 
 #define BRIDGE_ST_CONFIGURED 0x01u
 #define BRIDGE_ST_SUSPENDED 0x02u
@@ -146,6 +149,8 @@ void bridge_init(bridge_t *b, const bridge_io_t *io, const uint8_t serial[8]);
 
 // USB stack state. A mount change forgets everything the host was sent.
 // Entering suspend releases everything (the release is sent after resume).
+void bridge_channel_lost(bridge_t *b, uint8_t channel);
+
 void bridge_set_usb_state(bridge_t *b, bool mounted, bool suspended);
 
 // Relative mouse protocol chosen by the host (SET_PROTOCOL). Boot protocol

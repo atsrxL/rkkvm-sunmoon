@@ -1,0 +1,19 @@
+{
+  "destination": "/Volumes/ZSSD/Target/RKMoon-RP2350-HID",
+  "version": "0.2",
+  "verification": "staged copy readback then replace; final readback SHA256 matches",
+  "files": {
+    "rkmoon_rp2350_hid.uf2": {
+      "size": 88576,
+      "sha256": "f473d80ada8358bcb17a5be0f41ae212def3cf593013eb4ff268f8b914ea8238"
+    },
+    "rkmoon_rp2350_hid.uf2.sha256": {
+      "size": 88,
+      "sha256": "876550edd25402be7e3cd8f62152f76096a3362b6f4c5af77137d5061564a827"
+    },
+    "README.md": {
+      "size": 1596,
+      "sha256": "53fa49d6fa0a847fd4ec7156c4179b747d813ca664766517ff57b4ebc25c71b0"
+    }
+  }
+}

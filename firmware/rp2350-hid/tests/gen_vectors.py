@@ -17,7 +17,7 @@ def main(src, dst):
     out.append("typedef struct { const char *name; int to_board; uint8_t type, seq; uint8_t payload[40]; size_t plen;"
                " uint8_t frame[48]; size_t flen; } vec_frame_t;")
     out.append("static const vec_frame_t VEC_FRAMES[] = {")
-    for f in d["frames"]:
+    for f in d["frames"] + d.get("firmware_info_variants", []):
         p, pl = hexbytes(f["payload_hex"])
         fr, fl = hexbytes(f["frame_hex"])
         out.append('  {"%s", %d, %d, %d, %s, %d, %s, %d},' % (

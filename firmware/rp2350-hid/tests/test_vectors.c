@@ -110,6 +110,9 @@ int vectors_run(int *checks) {
         bridge_io_t io = {.ctx = NULL, .send = cap_send, .remote_wakeup = NULL};
         cap_len = 0;
         if (v->type == PROTO_T_INFO) {
+            // All firmware versions remain wire/decode vectors; generate only
+            // the INFO corresponding to this build's version and capabilities.
+            if (v->payload[2] != BRIDGE_FW_MINOR || v->payload[3] != BRIDGE_CAPS) continue;
             bridge_init(&b, &io, &v->payload[4]);
             bridge_set_usb_state(&b, true, false);
             uint8_t ver = PROTO_VERSION;

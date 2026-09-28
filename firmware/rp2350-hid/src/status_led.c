@@ -14,8 +14,16 @@ static int last = -1;
 
 bool status_led_init(void) {
     uint offset;
+#if RKMOON_PIO_USB_CDC
+    led_pio = pio2;
+    led_sm = 0;
+    pio_sm_claim(led_pio, led_sm);
+    offset = pio_add_program(led_pio, &ws2812_program);
+    led_ok = true;
+#else
     led_ok = pio_claim_free_sm_and_add_program_for_gpio_range(&ws2812_program, &led_pio, &led_sm, &offset,
                                                               RKMOON_WS2812_PIN, 1, true);
+#endif
     if (led_ok) {
         ws2812_program_init(led_pio, led_sm, offset, RKMOON_WS2812_PIN, 800000.0f);
     }

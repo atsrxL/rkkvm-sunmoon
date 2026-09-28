@@ -1,0 +1,10 @@
+{
+  "ON": {
+    "rkmoon_rp2350_hid.elf": "358594afa2cf1d3acf1ad4999383433c3141445930c00b9816f2b51af81594d2",
+    "rkmoon_rp2350_hid.uf2": "f473d80ada8358bcb17a5be0f41ae212def3cf593013eb4ff268f8b914ea8238"
+  },
+  "OFF": {
+    "rkmoon_rp2350_hid.elf": "e84a9c4c7fcde8e20a7d5c7400a4f9f6cde0e95f718283ae5952a994df77630b",
+    "rkmoon_rp2350_hid.uf2": "4e62374eb159e68df614dd659c867265314d720740293c2f1a8c5a92a028f0b6"
+  }
+}

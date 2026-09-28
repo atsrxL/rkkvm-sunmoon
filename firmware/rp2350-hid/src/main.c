@@ -8,6 +8,7 @@
 
 #include "bridge.h"
 #include "hardware/watchdog.h"
+#include "hardware/clocks.h"
 #include "pico/stdlib.h"
 #include "pico/unique_id.h"
 #include "status_led.h"
@@ -16,7 +17,7 @@
 #include "usb_descriptors.h"
 
 #if RKMOON_PIO_USB_CDC
-#error "PIO-USB CDC channel is not supported with this TinyUSB (single device stack); see README"
+#include "pio_cdc.h"
 #endif
 
 // Chip watchdog: if the main loop ever stalls, the chip resets, USB drops
@@ -31,6 +32,10 @@ static void io_send(void *ctx, uint8_t channel, const uint8_t *frame, size_t len
     (void)ctx;
     if (channel == BRIDGE_CH_UART) {
         uart_link_write(frame, len);
+#if RKMOON_PIO_USB_CDC
+    } else if (channel == BRIDGE_CH_PIO_CDC) {
+        if (!pio_cdc_write(frame, len)) bridge_note_dropped(&g_bridge, (uint32_t)len);
+#endif
     }
 }
 
@@ -76,6 +81,9 @@ static void pump_usb_reports(void) {
 }
 
 int main(void) {
+#if RKMOON_PIO_USB_CDC
+    set_sys_clock_khz(120000, true);
+#endif
     pico_unique_board_id_t id;
     pico_get_unique_board_id(&id);
     usb_descriptors_set_serial(id.id);
@@ -88,6 +96,9 @@ int main(void) {
     uart_link_init();
     tud_init(0);
     watchdog_enable(CHIP_WATCHDOG_MS, true);
+#if RKMOON_PIO_USB_CDC
+    pio_cdc_init(id.id);
+#endif
 
     for (;;) {
         watchdog_update();
@@ -95,6 +106,9 @@ int main(void) {
         uint32_t t = now_ms();
         bridge_set_usb_state(&g_bridge, tud_mounted(), tud_suspended());
         pump_uart(t);
+#if RKMOON_PIO_USB_CDC
+        pio_cdc_pump(&g_bridge, t);
+#endif
         bridge_tick(&g_bridge, t);
         pump_usb_reports();
         uart_link_poll_tx();

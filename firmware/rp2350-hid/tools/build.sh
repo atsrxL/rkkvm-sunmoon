@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build firmware (.elf/.uf2) and run host unit tests inside the pinned Docker
-# image. Output: <repo>/build/rp2350-hid/{rkmoon_rp2350_hid.elf,.uf2,SHA256SUMS}
+# image. Output: <repo>/build/rp2350-hid-{ON,OFF}/{rkmoon_rp2350_hid.elf,.uf2,SHA256SUMS}
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 repo="$(cd "$here/../.." && pwd)"
@@ -9,7 +9,7 @@ image="rkmoon-rp2350-build:1"
 "$here/tools/fetch_deps.sh"
 docker build -q -t "$image" "$here/tools" >/dev/null
 
-docker run --rm -v "$repo:/src" -w /src/firmware/rp2350-hid "$image" bash -euo pipefail -c '
+docker run --rm -e RKMOON_PIO_USB_CDC="${RKMOON_PIO_USB_CDC:-ON}" -v "$repo:/src" -w /src/firmware/rp2350-hid "$image" bash -euo pipefail -c '
   deps=/src/build/rp2350-hid-deps
   export PICO_SDK_PATH=$deps/pico-sdk
   # picotool (host tool used for UF2 generation), built once per deps dir
@@ -18,9 +18,9 @@ docker run --rm -v "$repo:/src" -w /src/firmware/rp2350-hid "$image" bash -euo p
     cmake --build /tmp/picotool-build >/dev/null
     cmake --install /tmp/picotool-build >/dev/null
   fi
-  out=/src/build/rp2350-hid
-  rm -rf /tmp/fw && mkdir -p $out
-  cmake -S . -B /tmp/fw -G Ninja -DCMAKE_BUILD_TYPE=Release -DPICO_BOARD=${PICO_BOARD:-waveshare_rp2350_usb_c}     -Dpicotool_DIR=$deps/picotool-install/picotool
+  out=/src/build/rp2350-hid-${RKMOON_PIO_USB_CDC}
+  mkdir -p $out
+  cmake -S . -B /tmp/fw -G Ninja -DCMAKE_BUILD_TYPE=Release -DRKMOON_PIO_USB_CDC=$RKMOON_PIO_USB_CDC -DPICO_BOARD=${PICO_BOARD:-waveshare_rp2350_usb_c}     -Dpicotool_DIR=$deps/picotool-install/picotool
   cmake --build /tmp/fw
   cp /tmp/fw/rkmoon_rp2350_hid.elf /tmp/fw/rkmoon_rp2350_hid.uf2 /tmp/fw/rkmoon_rp2350_hid.elf.map $out/
   arm-none-eabi-size $out/rkmoon_rp2350_hid.elf | tee $out/size.txt

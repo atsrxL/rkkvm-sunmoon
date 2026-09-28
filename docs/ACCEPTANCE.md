@@ -135,7 +135,7 @@
 | 固件交叉编译（pico-sdk 2.3.1，板型 waveshare_rp2350_usb_c，自带头文件） | 通过（仅编译） | arm-none-eabi-gcc 13.2.1；uf2 351562e6…，elf 08eb4e42…；text 28424 B |
 | Target 交付 RKMoon-RP2350-HID | 通过 | uf2 读回 cmp 一致，SHA256 351562e62cef259720ef57986ffc82f80e8240e176c7db1c388fb7354785da31 |
 | 上板：枚举、键鼠输入、boot 协议、remote wakeup、灯色、UART 1 Mbaud、500 ms 释放 | 未测试 | 未上板 |
-| PIO-USB CDC 控制通道 B | 未实现 | TinyUSB 单设备栈，编译开关关闭，见固件 README |
+| PIO-USB CDC 控制通道 B | 部分完成 | v0.2 独立 CDC 已实现，默认 ON，编译/主机测试通过，未上板；见下方最新矩阵 |
 
 ## 采集缓冲池 ADR-013（2026-09-28，r12）
 
@@ -147,3 +147,17 @@
 | 碎片化后运行时分配 | 失败（预期） | 需重启，已记录 |
 | worker 池化 1080p60 HEVC 实机采集+编码+独立解码 | 通过 | 175 帧，ffmpeg 无错，画面正常 |
 | Windows 客户端连接 | 未测试 | 待用户实测 |
+
+## RP2350 v0.2 控制通道 B（2026-09-28 最新；编译/主机测试，未上板）
+
+| 检查 | 状态 | 证据与边界 |
+|---|---|---|
+| Docker 固件 ON / OFF | 通过 | text/bss 47904/19436 与 28424/6044 B；固定 SDK/PIO commit |
+| Mac + Docker ASan/UBSan | 通过 | 核心 ON/OFF 各 200718 checks；CDC 描述符/请求、10万随机 setup、100万字节 SPSC 跨线程、通道仲裁/失效 |
+| CDC EP0/bulk/ZLP 状态机 | 通过（模拟） | 生产 CDC 栈 + 控制器桩，非 USB 硬件 |
+| 0.1 客户端协议兼容 | 通过（Mac 离线） | 原 Qt 12/12，未改客户端、未重新 Windows 构建 |
+| Target UF2 交付与 SHA256 读回 | 通过 | results/20260928-rp2350-cdc/delivery.json |
+| PIO CDC Windows/Linux 枚举、USB 时序、长稳/背压/Hub | 未测试 | 无真板 |
+| 原生 HID、UART A/B 切换、拔线/DTR/挂起释放、WS2812 | 未测试 | 见固件 README 上板清单，先确认控制线断 VBUS |
+
+完整产物/hash 与失败修复记录见 [本轮记录](../results/20260928-rp2350-cdc/STATUS.md)。没有 T6 操作，没有服务端或 client/ 改动，没有实机通过声明。

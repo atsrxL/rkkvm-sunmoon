@@ -2,7 +2,7 @@
 
 Waveshare RP2350-USB-C 上运行的 USB HID 桥固件，协议与硬件设计见 [ADR-012](../../docs/ADR-012-rp2350-hid-bridge.md)。
 
-> **状态：仅编译验证，未上板。** 板子、USB 枚举、被控机输入、remote wakeup、WS2812 灯色、串口实际收发都没有在真实硬件上测试过。主机端单元测试只覆盖与硬件无关的协议解析、CRC、看门狗和报告队列。
+> **状态：仅编译验证，未上板。** 板子、USB 枚举、被控机输入、remote wakeup、WS2812 灯色、串口实际收发都没有在真实硬件上测试过。主机端单元测试覆盖协议、CDC 请求/描述符、跨核缓冲与传输状态模拟，不代表 PIO 电气时序通过。
 
 ## 功能
 
@@ -15,7 +15,7 @@ Waveshare RP2350-USB-C 上运行的 USB HID 桥固件，协议与硬件设计见
 - 500 ms 看门狗：有按键或按钮按下、且 500 ms 没有收到活动通道的合法帧时，自动全释放。另有 1 s 芯片看门狗防止主循环卡死。
 - 相对移动拆分（超过单个报告范围时分多次发送）与合并（队列将满时累加同按钮状态的移动），按键和按钮变化从不丢弃。
 - WS2812 状态灯（GP16）。
-- 控制通道 B（PIO-USB CDC）：**未实现，编译开关默认关闭**，原因见下文。
+- 控制通道 B（推荐）：PIO-USB CDC ACM，默认开启，固件 v0.2，**已实现、未实机验证**。
 
 ## 刷写
 
@@ -28,7 +28,7 @@ Waveshare RP2350-USB-C 上运行的 USB HID 桥固件，协议与硬件设计见
 ## 接线
 
 - 板子原生 USB-C 口 → 被控电脑。板子由被控电脑供电。
-- 控制通道 A：T6 的 USB-A 口插一个 **3.3 V** USB 转 TTL 模块（CH340/CP2102/FT232 均可，必须是 3.3 V 电平），**只接三根线**：
+- 控制通道 A（备用）：T6 的 USB-A 口插一个 **3.3 V** USB 转 TTL 模块（CH340/CP2102/FT232 均可，必须是 3.3 V 电平），**只接三根线**：
 
 | USB 转 TTL 模块 | RP2350-USB-C |
 |---|---|
@@ -38,7 +38,14 @@ Waveshare RP2350-USB-C 上运行的 USB HID 桥固件，协议与硬件设计见
 
   不要接模块的 5V 或 3V3：板子已由被控电脑供电，两边电源互接会倒灌。TX 和 RX 要交叉。T6 上不需要改设备树。
 
-- 板子上的 PIO-USB Type-C 母口不要连接。它的 VBUS 与原生口的 VBUS 在板上直接相连，用普通 USB 线连另一台主机会让两台主机的 5V 短接。
+- 控制通道 B（推荐，无需 USB 转 TTL）：PIO-USB Type-C → 控制端 T6 Linux 或 Windows 10+，D+=GP12、D-=GP13（DM=DP+1，D+ 板载 1.5k 上拉）。
+
+| 通道 B 数据线 | 连接 |
+|---|---|
+| D+ / D- / GND | 保持连通 |
+| VBUS / 5V | **必须断开，连接前用万用表确认** |
+
+**两个 Type-C 的 VBUS 在板上直连 VSYS；禁止用两根普通 USB 线接两台主机。** 先接原生口供电，再用断 VBUS 数据线接 PIO 口；不是只供电的“数据阻断器”。控制端应枚举 COM 或 /dev/ttyACM*，打开后置 DTR，再发 HELLO。现有 Windows 测试客户端已经置 DTR，可直接选择该 COM 口。
 
 ## 状态灯
 
@@ -72,7 +79,7 @@ Waveshare RP2350-USB-C 上运行的 USB HID 桥固件，协议与硬件设计见
 firmware/rp2350-hid/tools/build.sh
 ```
 
-脚本会：按 `deps.lock` 拉取并核对依赖 commit（放在 `build/rp2350-hid-deps/`，不入库）；构建 Docker 镜像 `rkmoon-rp2350-build:1`（Ubuntu 24.04，arm-none-eabi-gcc 13.2.1，cmake 3.28.3）；在容器里编译 picotool 和固件；运行主机单元测试；把 `.elf`、`.uf2`、`.elf.map`、`SHA256SUMS`、`picotool-info.txt` 放到 `build/rp2350-hid/`。
+脚本会：按 `deps.lock` 拉取并核对依赖 commit（放在 `build/rp2350-hid-deps/`，不入库）；构建 Docker 镜像 `rkmoon-rp2350-build:1`（Ubuntu 24.04，arm-none-eabi-gcc 13.2.1，cmake 3.28.3）；在容器里编译 picotool 和固件；运行主机单元测试；把 `.elf`、`.uf2`、`.elf.map`、`SHA256SUMS`、`picotool-info.txt` 放到 `build/rp2350-hid-ON/ 或 build/rp2350-hid-OFF/`。
 
 板型：pico-sdk 2.3.1 没有 `waveshare_rp2350_usb_c`，本工程自带 [boards/waveshare_rp2350_usb_c.h](boards/waveshare_rp2350_usb_c.h)，按官方原理图写（2 MB W25Q16JV，GP16 WS2812，GP12/GP13 PIO-USB，无 GP25 LED）。
 
@@ -93,17 +100,25 @@ make -C firmware/rp2350-hid/tests
 | Pico-PIO-USB | 0.7.2 | `3c1eec341a5232640e4c00628b889b641af34b28` |
 | picotool（仅用于生成 UF2） | 2.3.1 | `2041936441b48a3cc53ae3da9e805229fe8f4e18` |
 
-Pico-PIO-USB 已固定并由 `fetch_deps.sh` 拉取核对，但当前固件不链接它（见下文）。升级任何一项需要重新跑全部测试并更新本表和 `deps.lock`。
+Pico-PIO-USB 已固定并由 fetch_deps.sh 拉取核对；ON 使用设备底层的精确补丁副本，不修改共享依赖 checkout。升级任何一项需要重新跑全部测试并更新本表和 `deps.lock`。
 
 ## PIO-USB CDC 通道（控制通道 B）的结论
 
-**不能在同一份 TinyUSB 里同时跑原生 HID 设备和 PIO-USB CDC 设备，这一版关闭该通道。** 依据（都在上面固定的源码里）：
+v0.1 的限制仍成立：TinyUSB 0.18.0 只有单设备栈，dcd_rp2040 与 dcd_pio_usb 互斥。v0.2 因此保留原生口 TinyUSB，PIO 口改用独立最小 CDC 栈，不链接第二个 dcd。
 
-1. TinyUSB 设备栈只有一个实例：`src/device/usbd.c` 中是单个 `static usbd_device_t _usbd_dev` 和单个 `_usbd_rhport`；`class/hid/hid_device.c` 等类驱动写死 `rhport = 0`。一个设备栈只能描述一个 USB 设备。
-2. 两种设备控制器驱动互斥：`portable/raspberrypi/rp2040/dcd_rp2040.c` 只在 `!CFG_TUD_RPI_PIO_USB` 时编译，`portable/raspberrypi/pio_usb/dcd_pio_usb.c` 只在 `CFG_TUD_RPI_PIO_USB` 时编译，同一个固件里只能二选一。
-3. 绕开 TinyUSB、直接用 Pico-PIO-USB 自带的设备 API（`pio_usb_device_init`）也不够：`pio_usb_device.c` 的 setup 处理只认标准请求和 HID 类请求（SET_REPORT/SET_IDLE/SET_PROTOCOL），不处理 CDC ACM 的 SET_LINE_CODING/SET_CONTROL_LINE_STATE，也没有批量端点收发的上层封装；此外它要求系统时钟是 12 MHz 的整数倍（官方示例设为 120 MHz），与本固件默认 150 MHz 不同。
+- 固件 0.2，INFO caps bit4 表示 B；协议 v1 和 INFO 12 字节保持兼容。
+- 系统 120 MHz（不超频）；原生 USB 48 MHz，UART 精确 1 Mbaud；WS2812 分频 15、800 kHz。
+- core1 专用 PIO USB，core0 原有主循环。PIO0 SM0 TX / DMA0，PIO1 SM0 RX + SM1 EOP；灯 PIO2 SM0、无 DMA。
+- CDC 1209:0002、产品 RKMoon RP2350 Control、唯一芯片序列号，与 HID 1209:0001 不同。两个 PID 仅内部测试。IAD + 两接口，EP81 通知，EP02/EP82 bulk 64。
+- RX/TX 各 2 KiB 无锁单生产者/单消费者缓冲，OUT 未有整包空间则 NAK；回复空间不足则暂停解析。DTR、reset、SOF 丢失触发 epoch 清理，旧字节不跨会话重放；core1 无响应也撤销 B 会话。恢复要重新 HELLO，现有 500 ms 看门狗全释放规则不变。
+- CDC 请求、EP0 状态阶段、bulk ZLP、端点 halt、SERIAL_STATE 已实现；详细补丁及测试边界见 ADR-012。
 
-要做通道 B，可行路线是：在 Pico-PIO-USB 底层上自己实现一个最小 CDC ACM（或 vendor 类 + WinUSB）设备，系统时钟改为 120/240 MHz，PIO-USB 放到核心 1。它需要单独的实现和实机验证，也要处理两个口 VBUS 直连的供电问题（ADR-012 已写明必须使用断开 VBUS 的线）。编译开关 `-DRKMOON_PIO_USB_CDC=ON` 目前会直接报错并说明原因，防止误以为已经支持。
+编译两个配置：
+
+    firmware/rp2350-hid/tools/build.sh
+    RKMOON_PIO_USB_CDC=OFF firmware/rp2350-hid/tools/build.sh
+
+OFF 保持原 UART/HID 路线与 150 MHz，不含 CDC/core1，版本仍为 0.2。构建结果与 SHA256 见 [本轮记录](../../results/20260928-rp2350-cdc/STATUS.md)。**两种配置均仅编译/主机测试，未上板。**
 
 ## 源码结构
 
@@ -122,6 +137,9 @@ firmware/rp2350-hid/
   src/tusb_config.h         TinyUSB 配置（3 个 HID 实例，无 CDC）
   src/uart_link.[ch]        UART0 中断接收环形缓冲 + 非阻塞发送
   src/status_led.[ch], ws2812.pio  WS2812 驱动
+  src/pio_cdc.[ch]          独立 CDC 设备栈与 core1/跨核传输
+  src/core/cdc_control.[ch], spsc.h  CDC 请求/描述符与无锁缓冲
+  patches/pio-device.patch  固定上游设备底层精确补丁
   tests/                    主机单元测试（Makefile，test_core.c，test_vectors.c，gen_vectors.py）
   tools/Dockerfile, build.sh, fetch_deps.sh
 ```
@@ -132,3 +150,15 @@ firmware/rp2350-hid/
 - 键盘 LED 输出报告被忽略，协议 v1 没有回传 Caps Lock 状态的帧。
 - boot 协议下相对鼠标只有 3 键、没有滚轮（boot 报告格式所限）。
 - 被控机挂起时输入不排队；唤醒后需要主机重发当前状态。
+
+## 首次上板验证清单（全部待验证）
+
+1. 两端 USB 均断开。确认 PIO 数据线/转接头 VBUS 不通，D+/D-/GND 连通；不要仅按商品名判断。
+2. BOOT + 原生口刷入 0.2 UF2。原生口接被控电脑供电，确认三个 HID 接口；此时 PIO 口保持断开。
+3. 用断 VBUS 线连接 PIO 口到 Windows 10+ / Linux 控制端，验证 usbser COM / cdc_acm、产品与唯一序列号；反向插头也要测试。
+4. 客户端选 COM，保持默认 1 Mbaud（CDC 忽略波特率），连接应显示固件 0.2、INFO caps=0x1f；验证 PING/PONG 与键鼠。
+5. 验证 64/128 字节边界、ZLP、长时间连续输入、主机暂停读取、不同 USB Hub、丢 ACK 重试无重复输入；真实时序不能从主机模拟推断。
+6. 按键期间拔控制线、关闭端口使 DTR 掉、控制机睡眠：最后合法帧后约 500 ms 全释放。恢复后重新连接/HELLO；确认旧字节不重放。
+7. UART A/B 交替 HELLO，旧通道不能继续输入；500 ms 释放、原生 USB 挂起唤醒、BIOS boot 键鼠、WS2812 灯色与 UART 1 Mbaud 均回归。
+
+没有 VBUS 感知且 D+ 固定上拉，固件无法主动电气断开；挂起与拔线通过 SOF 消失统一处理。PIO 全速时序、Windows 枚举与高负载稳定性仍是主要实机风险。
